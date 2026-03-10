@@ -105,7 +105,7 @@ const Q = {
     opts:[
       {e:"🪶",l:"Feathers",v:"feathers"},
       {e:"🐻",l:"Fur or hair",v:"fur"},
-      {e:"🐍",l:"Scales (overlapping, like a snake or fish)",v:"scales"},
+      {e:"🐍",l:"Scales — dry and scaly like a snake or lizard",v:"scales"},
       {e:"🪲",l:"Smooth, slimy, shiny or a hard shell",v:"smooth"},
     ],next:(a)=>{
       if(a.legs==="0") return "noleg_shape";
@@ -118,9 +118,9 @@ const Q = {
   noleg_shape:{id:"noleg_shape",emoji:"📐",text:"What was its body like?",
     opts:[
       {e:"🐍",l:"Long and thin — like a rope or ribbon",v:"rope"},
-      {e:"🐛",l:"Short and plump — like a grub or worm",v:"short-fat"},
+      {e:"🐛",l:"Short and chunky — like a worm or grub",v:"short-fat"},
       {e:"🐌",l:"Slimy blob — like a slug or snail",v:"blob"},
-      {e:"🐟",l:"Streamlined — like a fish (was in water)",v:"fish"},
+      {e:"🐟",l:"Smooth and fish-shaped — it was in the water",v:"fish"},
     ],next:(a)=>a.noleg_shape==="rope"?"snake_colour":"colour"},
 
   snake_colour:{id:"snake_colour",emoji:"🎨",text:"What colour was the snake?",
@@ -149,10 +149,10 @@ const Q = {
   // ── Birds ─────────────────────────────────────────────────────────────────
   bird_size:{id:"bird_size",emoji:"📏",text:"How big was the bird?",
     opts:[
-      {e:"🐝",l:"Tiny — smaller than my fist (fairy-wren sized)",v:"tiny"},
-      {e:"🐦",l:"Small — sparrow to starling sized",v:"small"},
-      {e:"🐧",l:"Medium — pigeon to magpie sized",v:"medium"},
-      {e:"🦅",l:"Large — cockatoo, raven or bigger",v:"large"},
+      {e:"🐝",l:"Tiny — smaller than my fist",v:"tiny"},
+      {e:"🐦",l:"Small — about the size of a tennis ball",v:"small"},
+      {e:"🐧",l:"Medium — about the size of a football",v:"medium"},
+      {e:"🦅",l:"Large — bigger than a football",v:"large"},
     ],next:()=>"bird_colour"},
 
   bird_colour:{id:"bird_colour",emoji:"🎨",text:"What colour was it mostly?",
@@ -163,10 +163,10 @@ const Q = {
       {e:"🌈",l:"Colourful — green, red, yellow, blue etc.",v:"colourful"},
     ],next:()=>"bird_behaviour"},
 
-  bird_behaviour:{id:"bird_behaviour",emoji:"👀",text:"What was it doing?",
+  bird_behaviour:{id:"bird_behaviour",emoji:"👀",text:"What was it doing when you saw it?",
     opts:[
       {e:"🎵",l:"Singing or calling loudly",v:"singing"},
-      {e:"🌿",l:"Foraging on the ground",v:"ground-forage"},
+      {e:"🌿",l:"Pecking around on the ground looking for food",v:"ground-forage"},
       {e:"🌳",l:"Sitting in a tree or on a wire",v:"perching"},
       {e:"✈️",l:"Flying overhead or swooping",v:"flying"},
     ],next:()=>"where"},
@@ -176,7 +176,7 @@ const Q = {
     opts:[
       {e:"🦎",l:"Low to the ground — flat with a long tail (lizard-like)",v:"lizard"},
       {e:"🐱",l:"Upright and rounded — like a cat, possum or rat",v:"upright"},
-      {e:"🐸",l:"Squat and wide — like a frog",v:"frog"},
+      {e:"🐸",l:"Short and wide with big back legs — like a frog",v:"frog"},
       {e:"🐕",l:"Tall on legs — dog or fox sized",v:"tall"},
     ],next:(a)=>{
       if(a.fourleg_shape==="lizard") return "lizard_colour";
@@ -195,7 +195,7 @@ const Q = {
   lizard_size:{id:"lizard_size",emoji:"📏",text:"How big was the lizard?",
     opts:[
       {e:"🐛",l:"Tiny — fits on my finger",v:"tiny"},
-      {e:"📱",l:"Small — about phone-sized",v:"small"},
+      {e:"📱",l:"Small — about as long as your hand",v:"small"},
       {e:"🐱",l:"Medium — up to about 30cm",v:"medium"},
       {e:"🐕",l:"Large — almost dog-sized",v:"large"},
     ],next:()=>"where"},
