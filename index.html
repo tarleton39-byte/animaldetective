@@ -69,15 +69,6 @@ h1 span{color:#2d7a4f;}
 .runner-photo-spinner{width:22px;height:22px;border-radius:50%;border:3px solid rgba(126,201,75,0.3);border-top-color:#7ec94b;animation:spin 0.8s linear infinite;}
 .runner-name{font-weight:800;font-size:14px;color:#4a2f14;}
 .runner-pct{font-size:12px;font-weight:700;color:#a89880;}
-.feedback-row{display:flex;align-items:center;justify-content:center;gap:12px;margin:18px 0 8px;padding:16px;background:#faf7f2;border-radius:18px;}
-.feedback-q{font-family:'Fredoka One',cursive;font-size:1rem;color:#7a6a56;}
-.thumb-btn{font-size:1.8rem;background:none;border:2.5px solid #e8ddd0;border-radius:50%;width:52px;height:52px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;}
-.thumb-btn:hover{transform:scale(1.18);}
-.thumb-btn.yes:hover{border-color:#7ec94b;background:#f2fce8;}
-.thumb-btn.no:hover{border-color:#f4913d;background:#fff5ed;}
-.thumb-btn.selected-yes{border-color:#7ec94b;background:#f2fce8;transform:scale(1.15);}
-.thumb-btn.selected-no{border-color:#f4913d;background:#fff5ed;transform:scale(1.15);}
-.feedback-thanks{font-size:13px;font-weight:800;color:#a89880;text-align:center;margin-top:4px;}
 .err-card{text-align:center;padding:40px 24px;}
 .deco{position:fixed;pointer-events:none;z-index:0;opacity:0.10;font-size:3rem;animation:float 7s ease-in-out infinite;}
 .deco:nth-child(2){top:4%;left:2%;animation-delay:0s;}
@@ -108,123 +99,114 @@ h1 span{color:#2d7a4f;}
   <div id="app"></div>
 </div>
 <script>
-// ── System prompt ──────────────────────────────────────────────────────────
-const SYSTEM = `You are a fun, enthusiastic wildlife detective helping children aged 8-12 identify animals they have spotted in Thornbury and the inner north of Melbourne, Australia. This includes backyards, Merri Creek, Darebin Creek, Edinburgh Gardens, Northcote, Preston, Brunswick, Coburg, Fitzroy, Collingwood, and the Yarra River corridor.
+const SYSTEM = `You are a wildlife expert for Melbourne's inner north (Thornbury, Northcote, Preston, Brunswick, Coburg, Fitzroy, Collingwood, Merri Creek, Darebin Creek, Yarra River corridor).
 
-You conduct a smart interview to identify the animal. Ask one question at a time. Each question must have 3-5 answer options that are easy for a 10-year-old to understand. Use simple everyday language — no scientific words, no reference to animals they might not know (do not say "starling-sized", say "about the size of a tennis ball"). Use fun emojis.
+Generate a complete branching question tree to identify an unknown animal spotted by a child in this area.
 
-After each answer, decide whether you have enough information to make a confident identification, or whether you need to ask another question. Ask at most 8 questions total. Always identify the animal by question 8 even if uncertain. If you are very confident after 4-5 questions, go straight to the result.
+The tree must:
+- Start with a broad question (e.g. legs)
+- Each answer leads to either another question node OR a result node
+- Maximum depth of 6 questions along any path
+- Cover all common Melbourne inner-north animals: possums, magpies, lorikeets, rosellas, ravens, mynas, blackbirds, blue-tongue lizards, garden skinks, water dragons, tiger snakes, eastern brown snakes, red-bellied black snakes, carpet pythons, common froglets, striped marsh frogs, huntsman spiders, redback spiders, garden orb weavers, daddy-long-legs, European wasps, honey bees, monarch butterflies, foxes, rats, mice, microbats, tawny frogmouths, powerful owls, boobook owls, willie wagtails, welcome swallows, grey fantails, spotted doves, crested pigeons, sulphur-crested cockatoos, galahs, little corellas
+- Use simple language a 10-year-old understands
+- Each question node has 3-5 options with fun emojis
+- Every option must have a "next" that is either a question node or result node — NO dead ends
+- Always include a "not_sure" option on every question
 
-ALWAYS respond with valid JSON in one of these two formats and nothing else:
+Question node format:
+{"type":"question","id":"unique_id","emoji":"🦵","text":"Question text?","options":[{"emoji":"🐍","label":"Option label","value":"val","next": ...}]}
 
-If you need more information:
-{"type":"question","questionNumber":1,"emoji":"🦵","question":"Did it have legs?","options":[{"emoji":"🐍","label":"No legs at all — it slithered or wriggled","value":"no_legs"},{"emoji":"🐦","label":"2 legs","value":"2_legs"},{"emoji":"🐱","label":"4 legs","value":"4_legs"},{"emoji":"🦟","label":"Lots of legs — 6 or more","value":"many_legs"}]}
+Result node format:
+{"type":"result","top":{"commonName":"Tiger Snake","scientificName":"Notechis scutatus","emoji":"🐍","confidence":75,"where":"Creekside and damp gardens","fact":"Two fun sentences for a 10-year-old."},"runners":[{"commonName":"Eastern Brown Snake","scientificName":"Pseudonaja textilis","emoji":"🐍","confidence":45}]}
 
-If you are ready to identify the animal:
-{"type":"result","top":{"commonName":"Common Brushtail Possum","scientificName":"Trichosurus vulpecula","emoji":"🐾","confidence":92,"where":"Roof cavities, garden trees and fence lines","fact":"Brushtail possums are so common in Melbourne that some families name their resident possum! They have a special pouch for their babies and can live for over 10 years."},"runners":[{"commonName":"Common Ringtail Possum","scientificName":"Pseudocheirus peregrinus","emoji":"🐾","confidence":35},{"commonName":"Black Rat","scientificName":"Rattus rattus","emoji":"🐀","confidence":15}]}
+Respond ONLY with a JSON object: {"tree": <root question node>}
+No markdown fences, no explanation, just the JSON.`;
 
-Rules:
-- Focus on animals actually found in Melbourne inner north: possums, magpies, lorikeets, rosellas, ravens, mynas, blackbirds, blue-tongue lizards, garden skinks, water dragons, snakes (tiger snake, eastern brown snake, red-bellied black snake, carpet python), frogs (common froglet, striped marsh frog, eastern dwarf tree frog), huntsman spiders, redback spiders, garden orb weavers, daddy-long-legs, European wasps, honey bees, monarch butterflies, cabbage white butterflies, foxes, rats, mice, microbats, tawny frogmouths, powerful owls, boobook owls, willie wagtails, welcome swallows, grey fantails, spotted doves, crested pigeons, sulphur-crested cockatoos, galahs, little corellas, and any other species plausibly seen in inner Melbourne.
-- Ask smart follow-up questions based on previous answers. If they say bird, ask about size then colour. If they say snake, ask about colour and pattern. If they say spider, ask about size and whether it had a web.
-- Keep questions visual and concrete — kids remember what they saw, not technical details.
-- The fact must be 2 sentences, genuinely surprising or funny, written for a curious 10-year-old.
-- confidence is a number 0-100.
-- Include 2-3 runners in results ordered by confidence descending.
-- NEVER include any text outside the JSON. No preamble, no explanation, no markdown fences.`;
+let state = {screen:"start",tree:null,node:null,history:[],answers:[],result:null,error:null};
 
-// ── State ──────────────────────────────────────────────────────────────────
-let state = {screen:"start",messages:[],questionNumber:0,currentQuestion:null,result:null,error:null};
-
-// ── iNaturalist photo ──────────────────────────────────────────────────────
 async function fetchPhoto(sciName,commonName){
   for(const term of [sciName,commonName].filter(Boolean)){
     try{
       const r=await fetch(`https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(term)}&per_page=1&locale=en`);
-      if(!r.ok) continue;
+      if(!r.ok)continue;
       const d=await r.json();
-      const photo=d?.results?.[0]?.default_photo;
+      const photo=d&&d.results&&d.results[0]&&d.results[0].default_photo;
       if(photo){const url=(photo.medium_url||photo.square_url||"").replace("/square.","/medium.");if(url)return{url,attr:photo.attribution||""};}
     }catch(e){}
   }
   return null;
 }
 
-// ── API call ───────────────────────────────────────────────────────────────
-async function callClaude(messages){
-  const res=await fetch("/api/identify",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:SYSTEM,messages})
-  });
+async function callClaude(messages,system,maxTokens){
+  const body={model:"claude-sonnet-4-5",max_tokens:maxTokens||1000,messages};
+  if(system)body.system=system;
+  const res=await fetch("/api/identify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const data=await res.json();
-  if(data.error) throw new Error(`API: ${data.error.message}`);
-  if(!data.content) throw new Error(`Unexpected: ${JSON.stringify(data).slice(0,200)}`);
-  const text=data.content.map(b=>b.text||"").join("");
+  if(data.error)throw new Error("API: "+data.error.message);
+  if(!data.content)throw new Error("Unexpected: "+JSON.stringify(data).slice(0,200));
+  return data.content.map(function(b){return b.text||"";}).join("");
+}
+
+async function generateTree(){
+  const text=await callClaude([{role:"user",content:"Generate the complete animal identification question tree for Melbourne's inner north."}],SYSTEM,4000);
   const m=text.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error("No JSON in response");
+  if(!m)throw new Error("No JSON in tree response");
+  const parsed=JSON.parse(m[0]);
+  if(!parsed.tree)throw new Error("Invalid tree — missing 'tree' key");
+  return parsed.tree;
+}
+
+async function identifyFromAnswers(answers){
+  const summary=answers.map(function(a){return"- "+a.q+": "+a.a;}).join("\n");
+  const prompt="You are an expert Melbourne wildlife biologist. A child in Thornbury answered these questions:\n"+summary+"\n\nIdentify the most likely animal from Melbourne's inner north.\nRespond ONLY with valid JSON, no markdown:\n{\"top\":{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0,\"where\":\"\",\"fact\":\"\"},\"runners\":[{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0}]}\nThe fact must be 2 sentences, genuinely surprising, written for a curious 10-year-old. Include 2-3 runners.";
+  const text=await callClaude([{role:"user",content:prompt}],null,800);
+  const m=text.match(/\{[\s\S]*\}/);
+  if(!m)throw new Error("No JSON in identification");
   return JSON.parse(m[0]);
 }
 
-// ── Start — ask first question ─────────────────────────────────────────────
 async function startQuiz(){
-  state={screen:"loading",messages:[],questionNumber:0,currentQuestion:null,result:null,error:null};
+  state={screen:"loading",tree:null,node:null,history:[],answers:[],result:null,error:null};
   render();
   try{
-    const messages=[{role:"user",content:"I just spotted an animal in my backyard in Thornbury, Melbourne. Help me identify it!"}];
-    const response=await callClaude(messages);
-    state.messages=[...messages,{role:"assistant",content:JSON.stringify(response)}];
-    state.currentQuestion=response;
-    state.questionNumber=response.questionNumber||1;
-    state.screen="quiz";
-    render();
+    const tree=await generateTree();
+    state.tree=tree;state.node=tree;state.screen="quiz";render();
   }catch(e){state.screen="error";state.error=String(e);render();}
 }
 
-// ── Answer a question ──────────────────────────────────────────────────────
 async function answer(optionValue,optionLabel){
-  const q=state.currentQuestion;
-  const userMsg=`Q: ${q.question}\nA: ${optionLabel}`;
-  const newMessages=[...state.messages,{role:"user",content:userMsg}];
-  state.screen="loading";render();
-  try{
-    const response=await callClaude(newMessages);
-    state.messages=[...newMessages,{role:"assistant",content:JSON.stringify(response)}];
-    if(response.type==="result"){
-      state.result=response;state.screen="result";
-    }else{
-      state.currentQuestion=response;
-      state.questionNumber=response.questionNumber||state.questionNumber+1;
-      state.screen="quiz";
-    }
-    render();
-  }catch(e){state.screen="error";state.error=String(e);render();}
+  const node=state.node;
+  const chosen=node.options.find(function(o){return o.value===optionValue;});
+  if(!chosen)return;
+  const newAnswers=state.answers.concat([{q:node.text,a:optionLabel}]);
+  const next=chosen.next;
+  if(!next||next.type==="result"){
+    state.screen="loading";state.answers=newAnswers;render();
+    try{
+      let finalResult;
+      try{finalResult=await identifyFromAnswers(newAnswers);}
+      catch(e2){finalResult=next||{top:{commonName:"Unknown Animal",scientificName:"",emoji:"🐾",confidence:50,where:"Your backyard",fact:"Every animal is fascinating in its own way! Keep exploring and you'll find out more."},runners:[]};}
+      state.result=finalResult;state.screen="result";render();
+    }catch(e){state.screen="error";state.error=String(e);render();}
+    return;
+  }
+  state.history=state.history.concat([node]);state.answers=newAnswers;state.node=next;state.screen="quiz";render();
 }
 
-// ── Go back ────────────────────────────────────────────────────────────────
 function goBack(){
-  if(state.messages.length<=2) return;
-  const trimmed=state.messages.slice(0,-2);
-  const prevAssistant=trimmed[trimmed.length-1];
-  try{
-    const prevQ=JSON.parse(prevAssistant.content);
-    state.messages=trimmed;state.currentQuestion=prevQ;
-    state.questionNumber=prevQ.questionNumber||Math.max(1,state.questionNumber-1);
-    state.screen="quiz";render();
-  }catch(e){goHome();}
+  if(!state.history.length)return;
+  const prevNode=state.history[state.history.length-1];
+  state.history=state.history.slice(0,-1);state.node=prevNode;state.answers=state.answers.slice(0,-1);state.screen="quiz";render();
 }
 
 function goHome(){
-  state={screen:"start",messages:[],questionNumber:0,currentQuestion:null,result:null,error:null};render();
+  state={screen:"start",tree:null,node:null,history:[],answers:[],result:null,error:null};render();
 }
 
-// ── Confetti ───────────────────────────────────────────────────────────────
 function launchConfetti(emoji){
-  const canvas=document.getElementById("confetti-canvas");
-  if(!canvas)return;
-  const ctx=canvas.getContext("2d");
-  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
-  const pieces=[];
-  const colours=["#7ec94b","#f4913d","#38b2d8","#f9c74f","#f94144","#90be6d","#577590"];
+  const canvas=document.getElementById("confetti-canvas");if(!canvas)return;
+  const ctx=canvas.getContext("2d");canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  const pieces=[];const colours=["#7ec94b","#f4913d","#38b2d8","#f9c74f","#f94144","#90be6d","#577590"];
   for(let i=0;i<120;i++){pieces.push({x:canvas.width/2+(Math.random()-0.5)*200,y:canvas.height*0.35,vx:(Math.random()-0.5)*14,vy:Math.random()*-18-4,rot:Math.random()*360,rotV:(Math.random()-0.5)*12,w:Math.random()*10+6,h:Math.random()*5+3,colour:colours[Math.floor(Math.random()*colours.length)],opacity:1});}
   const cx=window.innerWidth/2,cy=window.innerHeight*0.35;
   for(let i=0;i<8;i++){
@@ -235,136 +217,72 @@ function launchConfetti(emoji){
     el.style.setProperty("--dy",Math.sin(angle)*dist+"px");
     el.style.setProperty("--rot",(Math.random()*720-360)+"deg");
     el.style.animationDelay=(Math.random()*0.2)+"s";
-    document.body.appendChild(el);setTimeout(()=>el.remove(),1600);
+    document.body.appendChild(el);setTimeout(function(){el.remove();},1600);
   }
   let frame=0;
   function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    pieces.forEach(p=>{
-      p.x+=p.vx;p.vy+=0.55;p.y+=p.vy;p.rot+=p.rotV;
-      if(frame>60)p.opacity-=0.018;
-      ctx.save();ctx.globalAlpha=Math.max(0,p.opacity);ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);ctx.fillStyle=p.colour;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();
-    });
+    pieces.forEach(function(p){p.x+=p.vx;p.vy+=0.55;p.y+=p.vy;p.rot+=p.rotV;if(frame>60)p.opacity-=0.018;ctx.save();ctx.globalAlpha=Math.max(0,p.opacity);ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);ctx.fillStyle=p.colour;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();});
     frame++;if(frame<140)requestAnimationFrame(draw);else ctx.clearRect(0,0,canvas.width,canvas.height);
   }
   draw();
 }
 
-// ── Thumbs ─────────────────────────────────────────────────────────────────
-function thumbFeedback(correct){
-  const yes=document.getElementById("thumb-yes"),no=document.getElementById("thumb-no"),thanks=document.getElementById("feedback-thanks");
-  if(!yes||!no)return;
-  yes.classList.remove("selected-yes","selected-no");no.classList.remove("selected-yes","selected-no");
-  if(correct){yes.classList.add("selected-yes");thanks.textContent="Awesome! 🎉 Glad we nailed it!";}
-  else{no.classList.add("selected-no");thanks.textContent="Thanks for letting us know — we'll try harder next time! 🔍";}
-  yes.disabled=true;no.disabled=true;thanks.style.display="block";
-}
-
-// ── Photos ─────────────────────────────────────────────────────────────────
 async function loadPhotos(){
-  const{top,runners=[]}=state.result;
-  setTimeout(()=>{const b=document.getElementById("conf-bar");if(b)b.style.width=top.confidence+"%";},150);
+  const top=state.result.top;const runners=state.result.runners||[];
+  setTimeout(function(){const b=document.getElementById("conf-bar");if(b)b.style.width=top.confidence+"%";},150);
   const photo=await fetchPhoto(top.scientificName,top.commonName);
   const wrap=document.getElementById("photo-main");
   if(wrap){
     if(photo){
       const img=new Image();
-      img.onload=()=>{wrap.innerHTML="";const el=document.createElement("img");el.src=photo.url;el.alt=top.commonName;el.onerror=()=>{wrap.innerHTML=`<span style="font-size:4rem">${top.emoji}</span>`;};wrap.appendChild(el);const credit=document.getElementById("photo-credit");if(credit&&photo.attr)credit.innerHTML=`📷 ${photo.attr} · <a href="https://www.inaturalist.org" target="_blank">iNaturalist</a>`;};
-      img.onerror=()=>{wrap.innerHTML=`<span style="font-size:4rem">${top.emoji}</span>`;};
+      img.onload=function(){wrap.innerHTML="";const el=document.createElement("img");el.src=photo.url;el.alt=top.commonName;el.onerror=function(){wrap.innerHTML="<span style='font-size:4rem'>"+top.emoji+"</span>";};wrap.appendChild(el);const credit=document.getElementById("photo-credit");if(credit&&photo.attr)credit.innerHTML="📷 "+photo.attr+" · <a href='https://www.inaturalist.org' target='_blank'>iNaturalist</a>";};
+      img.onerror=function(){wrap.innerHTML="<span style='font-size:4rem'>"+top.emoji+"</span>";};
       img.src=photo.url;
-    }else{wrap.innerHTML=`<span style="font-size:4rem">${top.emoji}</span>`;}
+    }else{wrap.innerHTML="<span style='font-size:4rem'>"+top.emoji+"</span>";}
   }
-  runners.forEach(async(r,i)=>{
+  runners.forEach(async function(r,i){
     const p=await fetchPhoto(r.scientificName,r.commonName);
-    const el=document.getElementById(`rp-${i}`);if(!el)return;
-    if(p){const img=new Image();img.onload=()=>{el.innerHTML="";const im=document.createElement("img");im.src=p.url;im.alt=r.commonName;el.appendChild(im);};img.onerror=()=>{el.innerHTML=`<span style="font-size:1.5rem">${r.emoji}</span>`;};img.src=p.url;}
-    else{el.innerHTML=`<span style="font-size:1.5rem">${r.emoji}</span>`;}
+    const el=document.getElementById("rp-"+i);if(!el)return;
+    if(p){const img=new Image();img.onload=function(){el.innerHTML="";const im=document.createElement("img");im.src=p.url;im.alt=r.commonName;el.appendChild(im);};img.onerror=function(){el.innerHTML="<span style='font-size:1.5rem'>"+r.emoji+"</span>";};img.src=p.url;}
+    else{el.innerHTML="<span style='font-size:1.5rem'>"+r.emoji+"</span>";}
   });
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────
 function render(){
   const app=document.getElementById("app");
-  if(state.screen==="start") app.innerHTML=renderStart();
-  else if(state.screen==="quiz") app.innerHTML=renderQuiz();
-  else if(state.screen==="loading") app.innerHTML=renderLoading();
-  else if(state.screen==="result"){app.innerHTML=renderResult();loadPhotos();setTimeout(()=>launchConfetti(state.result&&state.result.top&&state.result.top.emoji||"🎉"),400);}
-  else if(state.screen==="error") app.innerHTML=renderError();
+  if(state.screen==="start")app.innerHTML=renderStart();
+  else if(state.screen==="quiz")app.innerHTML=renderQuiz();
+  else if(state.screen==="loading")app.innerHTML=renderLoading();
+  else if(state.screen==="result"){app.innerHTML=renderResult();loadPhotos();setTimeout(function(){launchConfetti((state.result&&state.result.top&&state.result.top.emoji)||"🎉");},400);}
+  else if(state.screen==="error")app.innerHTML=renderError();
 }
 
-function renderStart(){return`<div class="card start-card fade-in">
-  <span class="parade">🦝🦎🐦‍⬛🦜🕷️🐍🐸</span>
-  <h2>Spot a mystery animal?</h2>
-  <p>Our AI wildlife expert will ask you a few smart questions to figure out what you spotted in <strong>Melbourne's inner north!</strong><br><br>Backyards, parks, Merri Creek, the Yarra — bring it on! 🌿</p>
-  <button class="btn-primary" onclick="startQuiz()">🔍 Start Detecting!</button>
-</div>`;}
+function renderStart(){return'<div class="card start-card fade-in"><span class="parade">🦝🦎🐦‍⬛🦜🕷️🐍🐸</span><h2>Spot a mystery animal?</h2><p>Our AI wildlife expert will ask you a few quick questions to figure out what you spotted in <strong>Melbourne\'s inner north!</strong><br><br>Backyards, parks, Merri Creek, the Yarra — bring it on! 🌿</p><button class="btn-primary" onclick="startQuiz()">🔍 Start Detecting!</button></div>';}
 
 function renderQuiz(){
-  const q=state.currentQuestion;if(!q)return renderLoading();
-  const qNum=state.questionNumber;
-  const pct=Math.min(90,(qNum/8)*100);
-  const canGoBack=state.messages.length>2;
-  // Escape single quotes in labels for inline onclick
-  const esc=s=>s.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
-  return`
-  <div class="prog-bg"><div class="prog-bar" style="width:${pct}%"></div></div>
-  <div class="prog-label">Question ${qNum} of up to 8</div>
-  <div class="card fade-in">
-    <div class="q-tag">Question ${qNum}</div>
-    <span class="q-emoji">${q.emoji||"🔍"}</span>
-    <div class="q-text">${q.question}</div>
-    <div>
-      ${q.options.map(o=>`<button class="opt" onclick="answer('${esc(o.value)}','${esc(o.label)}')"><span class="opt-emoji">${o.emoji}</span><span>${o.label}</span></button>`).join("")}
-      <button class="not-sure-btn" onclick="answer('not_sure','Not sure — I couldn\\'t tell')">
-        <span style="font-size:1.2rem">🤷</span><span>Not sure — I couldn't tell</span>
-      </button>
-    </div>
-    ${canGoBack?`<button class="back-btn" onclick="goBack()">← Back</button>`:""}
-  </div>`;}
+  const node=state.node;if(!node)return renderLoading();
+  const qNum=state.history.length+1;
+  const pct=Math.min(90,(qNum/6)*100);
+  function esc(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
+  const opts=node.options.map(function(o){return'<button class="opt" onclick="answer(\''+esc(o.value)+'\',\''+esc(o.label)+'\')"><span class="opt-emoji">'+o.emoji+'</span><span>'+o.label+'</span></button>';}).join("");
+  const back=state.history.length>0?'<button class="back-btn" onclick="goBack()">← Back</button>':"";
+  return'<div class="prog-bg"><div class="prog-bar" style="width:'+pct+'%"></div></div><div class="prog-label">Question '+qNum+'</div><div class="card fade-in"><div class="q-tag">Question '+qNum+'</div><span class="q-emoji">'+(node.emoji||"🔍")+'</span><div class="q-text">'+node.text+'</div><div>'+opts+'</div>'+back+'</div>';
+}
 
 function renderLoading(){
-  const msgs=["Asking the wildlife experts…","Checking Merri Creek records…","Consulting Melbourne field guides…","Thinking about what it could be…","Analysing your clues…"];
-  return`<div class="card loading-card fade-in">
-  <div class="spinner"></div>
-  <div class="loading-title">🔍 On the case…</div>
-  <div class="loading-sub">${msgs[Math.floor(Math.random()*msgs.length)]}</div>
-</div>`;}
+  const isFirst=!state.tree;
+  const msgs=isFirst?["Building your question tree…","Consulting Melbourne wildlife records…","Preparing your detective kit…"]:["Identifying your mystery creature…","Checking field guides…","Almost there…"];
+  return'<div class="card loading-card fade-in"><div class="spinner"></div><div class="loading-title">'+(isFirst?"🌿 Getting ready…":"🔍 On the case…")+'</div><div class="loading-sub">'+msgs[Math.floor(Math.random()*msgs.length)]+'</div></div>';
+}
 
 function renderResult(){
-  const{top,runners=[]}=state.result;
-  return`<div class="card result-card fade-in" id="result-card">
-  <div class="result-label">🎉 I think it's a…</div>
-  <div class="photo-wrap" id="photo-main"><div class="photo-spinner"></div></div>
-  <div id="photo-credit" class="photo-credit"></div>
-  <div class="result-name">${top.commonName}</div>
-  <div class="result-sci">${top.scientificName}</div>
-  <div class="where-tag">📍 ${top.where}</div>
-  <div class="conf-row">
-    <span style="font-size:13px;font-weight:800;color:#a89880">Match</span>
-    <div class="conf-bg"><div class="conf-bar" id="conf-bar" style="width:0%"></div></div>
-    <div class="conf-pct">${top.confidence}%</div>
-  </div>
-  <div class="fact"><strong>Fun fact! </strong>${top.fact}</div>
-  ${runners.length?`<div class="runners-label">Other possibilities…</div>${runners.map((r,i)=>`<div class="runner"><div class="runner-photo" id="rp-${i}"><div class="runner-photo-spinner"></div></div><div><div class="runner-name">${r.commonName}</div><div class="runner-pct">${r.confidence}% match · <em>${r.scientificName}</em></div></div></div>`).join("")}`:""}
-  <div class="feedback-row" id="feedback-row">
-    <span class="feedback-q">Did we get it right?</span>
-    <button class="thumb-btn yes" id="thumb-yes" onclick="thumbFeedback(true)">👍</button>
-    <button class="thumb-btn no" id="thumb-no" onclick="thumbFeedback(false)">👎</button>
-  </div>
-  <div id="feedback-thanks" style="display:none;" class="feedback-thanks"></div>
-  <div style="margin-top:16px;display:flex;flex-wrap:wrap;justify-content:center;">
-    <button class="btn-primary" onclick="startQuiz()">🔄 Try Another!</button>
-    <button class="btn-secondary" onclick="goHome()">🏠 Home</button>
-  </div>
-</div>`;}
+  const top=state.result.top;const runners=state.result.runners||[];
+  const runnerHtml=runners.length?'<div class="runners-label">Other possibilities…</div>'+runners.map(function(r,i){return'<div class="runner"><div class="runner-photo" id="rp-'+i+'"><div class="runner-photo-spinner"></div></div><div><div class="runner-name">'+r.commonName+'</div><div class="runner-pct">'+r.confidence+'% match · <em>'+r.scientificName+'</em></div></div></div>';}).join(""):"";
+  return'<div class="card result-card fade-in" id="result-card"><div class="result-label">🎉 I think it\'s a…</div><div class="photo-wrap" id="photo-main"><div class="photo-spinner"></div></div><div id="photo-credit" class="photo-credit"></div><div class="result-name">'+top.commonName+'</div><div class="result-sci">'+top.scientificName+'</div><div class="where-tag">📍 '+top.where+'</div><div class="conf-row"><span style="font-size:13px;font-weight:800;color:#a89880">Match</span><div class="conf-bg"><div class="conf-bar" id="conf-bar" style="width:0%"></div></div><div class="conf-pct">'+top.confidence+'%</div></div><div class="fact"><strong>Fun fact! </strong>'+top.fact+'</div>'+runnerHtml+'<div style="margin-top:16px;display:flex;flex-wrap:wrap;justify-content:center;"><button class="btn-primary" onclick="startQuiz()">🔄 Try Another!</button><button class="btn-secondary" onclick="goHome()">🏠 Home</button></div></div>';
+}
 
-function renderError(){return`<div class="card err-card fade-in">
-  <div style="font-size:3rem;margin-bottom:14px">😬</div>
-  <div style="font-family:'Fredoka One',cursive;font-size:1.4rem;color:#4a2f14;margin-bottom:10px">Something went wrong!</div>
-  <div style="color:#a89880;font-size:13px;margin-bottom:20px;word-break:break-all;padding:0 8px">${state.error}</div>
-  <button class="btn-primary" onclick="startQuiz()">🔄 Try Again</button>
-  <button class="btn-secondary" onclick="goHome()" style="margin-top:8px">🏠 Home</button>
-</div>`;}
+function renderError(){return'<div class="card err-card fade-in"><div style="font-size:3rem;margin-bottom:14px">😬</div><div style="font-family:\'Fredoka One\',cursive;font-size:1.4rem;color:#4a2f14;margin-bottom:10px">Something went wrong!</div><div style="color:#a89880;font-size:13px;margin-bottom:20px;word-break:break-all;padding:0 8px">'+state.error+'</div><button class="btn-primary" onclick="startQuiz()">🔄 Try Again</button><button class="btn-secondary" onclick="goHome()" style="margin-top:8px">🏠 Home</button></div>';}
 
 render();
 </script>
