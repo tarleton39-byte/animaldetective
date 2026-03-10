@@ -336,9 +336,9 @@ Respond ONLY with valid JSON, no markdown:
 }
 Include 2-3 runners ordered by confidence.`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages",{
+  const res = await fetch("/api/identify",{
     method:"POST",
-    headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01"},
+    headers:{"Content-Type":"application/json"},
     body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,messages:[{role:"user",content:prompt}]})
   });
   const data = await res.json();
