@@ -100,31 +100,318 @@ h1 span{color:#2d7a4f;}
   <div id="app"></div>
 </div>
 <script>
-// ── System prompt — generates full question tree upfront ───────────────────
-const SYSTEM = `You are a wildlife expert for Melbourne's inner north. Generate a flat question map to identify animals spotted by children in Thornbury, Northcote, Preston, Brunswick, Coburg, Fitzroy, Merri Creek, Darebin Creek areas.
+// ── Hardcoded question tree (flat node map) ────────────────────────────────
+const NODES = {
+  start: {
+    type:"q", emoji:"🦵",
+    text:"Did it have legs?",
+    options:[
+      {e:"🐍", l:"No legs — slithered or wriggled", next:"no_legs"},
+      {e:"🐦", l:"2 legs — it was a bird", next:"bird_size"},
+      {e:"🐾", l:"4 legs — furry mammal", next:"mammal_size"},
+      {e:"🦎", l:"4 legs — scaly lizard or frog", next:"reptile_type"},
+      {e:"🕷️", l:"6 or more legs — bug or spider", next:"bug_type"},
+      {e:"❓", l:"Not sure", next:"not_sure_start"}
+    ]
+  },
 
-Output a JSON object with two keys:
-- "start": the ID of the first question (string)
-- "nodes": an object where each key is a node ID and value is a QUESTION or RESULT node
+  // ── NO LEGS ──
+  no_legs: {
+    type:"q", emoji:"📏",
+    text:"How long was it?",
+    options:[
+      {e:"🤏", l:"Shorter than a ruler (under 30cm)", next:"small_snake"},
+      {e:"📏", l:"About as long as your arm", next:"med_snake"},
+      {e:"📐", l:"Longer than you are tall!", next:"big_snake"},
+      {e:"🐛", l:"Tiny — shorter than my finger", next:"r_earthworm"},
+      {e:"❓", l:"Not sure", next:"r_tiger_snake"}
+    ]
+  },
+  small_snake: {
+    type:"q", emoji:"🎨",
+    text:"What colour was it?",
+    options:[
+      {e:"🟤", l:"Brown or grey, plain", next:"r_eastern_brown"},
+      {e:"⬛", l:"Black or very dark", next:"r_redbelly"},
+      {e:"🟠", l:"Reddish or copper coloured", next:"r_eastern_brown"},
+      {e:"🌈", l:"Patterned — bands or blotches", next:"r_carpet_python"},
+      {e:"❓", l:"Not sure", next:"r_eastern_brown"}
+    ]
+  },
+  med_snake: {
+    type:"q", emoji:"🎨",
+    text:"What colour was it?",
+    options:[
+      {e:"⬛", l:"Black with a red belly underneath", next:"r_redbelly"},
+      {e:"🟤", l:"Brown or olive", next:"r_tiger_snake"},
+      {e:"🟡", l:"Yellowish bands or blotches", next:"r_tiger_snake"},
+      {e:"🌈", l:"Patterned — diamonds or blotches", next:"r_carpet_python"},
+      {e:"❓", l:"Not sure", next:"r_tiger_snake"}
+    ]
+  },
+  big_snake: {
+    type:"q", emoji:"🎨",
+    text:"What did it look like?",
+    options:[
+      {e:"🌈", l:"Diamond or carpet pattern", next:"r_carpet_python"},
+      {e:"⬛", l:"Mostly black", next:"r_redbelly"},
+      {e:"🟤", l:"Brown or olive coloured", next:"r_tiger_snake"},
+      {e:"❓", l:"Not sure", next:"r_carpet_python"}
+    ]
+  },
 
-QUESTION node format: {"type":"q","emoji":"🦵","text":"Question?","options":[{"e":"🐍","l":"No legs","next":"some_id"}]}
-RESULT node format: {"type":"r","name":"Brushtail Possum","sci":"Trichosurus vulpecula","emoji":"🐾","conf":88,"where":"Roof cavities and trees","fact":"Possums can live 10+ years!","runners":[{"name":"Ringtail Possum","sci":"Pseudocheirus peregrinus","emoji":"🐾","conf":30}]}
+  // ── BIRDS ──
+  bird_size: {
+    type:"q", emoji:"📏",
+    text:"How big was the bird?",
+    options:[
+      {e:"🏓", l:"Smaller than a tennis ball", next:"tiny_bird"},
+      {e:"🍎", l:"About the size of an apple", next:"small_bird"},
+      {e:"🐔", l:"About the size of a chicken", next:"med_bird"},
+      {e:"🦢", l:"Bigger than a chicken", next:"large_bird"},
+      {e:"❓", l:"Not sure", next:"small_bird"}
+    ]
+  },
+  tiny_bird: {
+    type:"q", emoji:"🎨",
+    text:"What did it look like?",
+    options:[
+      {e:"⚫", l:"Black and white, wagging tail", next:"r_willie_wagtail"},
+      {e:"🟤", l:"Brown, darting around fast", next:"r_welcome_swallow"},
+      {e:"🔵", l:"Blue and orange belly", next:"r_welcome_swallow"},
+      {e:"⬜", l:"Mostly grey or white", next:"r_grey_fantail"},
+      {e:"❓", l:"Not sure", next:"r_willie_wagtail"}
+    ]
+  },
+  small_bird: {
+    type:"q", emoji:"🎨",
+    text:"What colours did it have?",
+    options:[
+      {e:"⚫", l:"Black and white", next:"r_noisy_miner"},
+      {e:"🟤", l:"Plain brown", next:"r_spotted_dove"},
+      {e:"🟡", l:"Yellow and green", next:"r_noisy_miner"},
+      {e:"🔴", l:"Red or orange on head/chest", next:"r_eastern_rosella"},
+      {e:"❓", l:"Not sure", next:"r_noisy_miner"}
+    ]
+  },
+  med_bird: {
+    type:"q", emoji:"🎨",
+    text:"What did it look like?",
+    options:[
+      {e:"⚫", l:"Black and white, bold markings", next:"r_magpie"},
+      {e:"🌈", l:"Bright greens, reds, blues", next:"r_lorikeet"},
+      {e:"⬛", l:"All black or very dark", next:"r_raven"},
+      {e:"🟤", l:"Brown with a spotted chest", next:"r_common_blackbird"},
+      {e:"🐦", l:"Grey with a crest on head", next:"r_crested_pigeon"},
+      {e:"❓", l:"Not sure", next:"r_magpie"}
+    ]
+  },
+  large_bird: {
+    type:"q", emoji:"🌙",
+    text:"When did you see it?",
+    options:[
+      {e:"☀️", l:"During the day", next:"large_bird_day"},
+      {e:"🌙", l:"At night or dusk", next:"large_bird_night"},
+      {e:"❓", l:"Not sure", next:"r_cockatoo"}
+    ]
+  },
+  large_bird_day: {
+    type:"q", emoji:"🎨",
+    text:"What colour was it?",
+    options:[
+      {e:"⬜", l:"White with yellow crest", next:"r_cockatoo"},
+      {e:"🩷", l:"Pink and grey", next:"r_galah"},
+      {e:"⬛", l:"Mostly black", next:"r_raven"},
+      {e:"🟤", l:"Brown and speckled", next:"r_tawny_frogmouth"},
+      {e:"❓", l:"Not sure", next:"r_cockatoo"}
+    ]
+  },
+  large_bird_night: {
+    type:"q", emoji:"🎨",
+    text:"What did it look like?",
+    options:[
+      {e:"🟤", l:"Looked like a broken branch, grey-brown", next:"r_tawny_frogmouth"},
+      {e:"🦉", l:"Round head, hooting sound", next:"r_boobook"},
+      {e:"⬜", l:"White or pale, silent flier", next:"r_boobook"},
+      {e:"❓", l:"Not sure", next:"r_tawny_frogmouth"}
+    ]
+  },
 
-Rules:
-- Max 5 options per question, each with e (emoji), l (label under 40 chars), next (node ID)
-- Always include a not-sure option on every question pointing to a sensible default result
-- Cover: possums, magpies, lorikeets, rosellas, ravens, mynas, blackbirds, blue-tongues, skinks, water dragons, tiger snakes, eastern browns, red-bellied blacks, carpet pythons, froglets, marsh frogs, huntsmen, redbacks, orb weavers, wasps, bees, butterflies, foxes, rats, mice, microbats, tawny frogmouths, owls, willie wagtails, swallows, fantails, doves, cockatoos, galahs, corellas
-- Use child-friendly language (say "tennis ball sized" not "sparrow sized")
-- Max 5 questions deep per path
-- Keep fact strings under 120 chars, labels under 40 chars
-- Aim for 30-45 total nodes to keep size manageable
+  // ── MAMMALS ──
+  mammal_size: {
+    type:"q", emoji:"📏",
+    text:"How big was the furry animal?",
+    options:[
+      {e:"🐭", l:"Mouse-sized or smaller", next:"r_mouse"},
+      {e:"🐀", l:"Rat-sized — about as long as a banana", next:"r_rat"},
+      {e:"🐱", l:"Cat-sized", next:"mammal_cat_size"},
+      {e:"🦊", l:"Dog-sized or bigger", next:"r_fox"},
+      {e:"❓", l:"Not sure", next:"mammal_cat_size"}
+    ]
+  },
+  mammal_cat_size: {
+    type:"q", emoji:"🌙",
+    text:"When was it active?",
+    options:[
+      {e:"🌙", l:"Night time — I saw it after dark", next:"mammal_possum"},
+      {e:"☀️", l:"Daytime", next:"r_fox"},
+      {e:"🦇", l:"Flying in the air at dusk", next:"r_microbat"},
+      {e:"❓", l:"Not sure", next:"mammal_possum"}
+    ]
+  },
+  mammal_possum: {
+    type:"q", emoji:"👁️",
+    text:"What did its tail look like?",
+    options:[
+      {e:"🌿", l:"Long and curly — like a spring", next:"r_ringtail"},
+      {e:"🖌️", l:"Bushy and fluffy", next:"r_brushtail"},
+      {e:"🐭", l:"Thin and bare — like a rat tail", next:"r_rat"},
+      {e:"❓", l:"Not sure", next:"r_brushtail"}
+    ]
+  },
 
-Respond ONLY with the JSON. No markdown fences, no explanation.`;
+  // ── REPTILES & FROGS ──
+  reptile_type: {
+    type:"q", emoji:"🔍",
+    text:"What kind of creature was it?",
+    options:[
+      {e:"🦎", l:"Lizard — scaly and dry", next:"lizard_size"},
+      {e:"🐸", l:"Frog — smooth, jumpy", next:"frog_colour"},
+      {e:"❓", l:"Not sure", next:"lizard_size"}
+    ]
+  },
+  lizard_size: {
+    type:"q", emoji:"📏",
+    text:"How big was the lizard?",
+    options:[
+      {e:"🤏", l:"Tiny — shorter than my finger", next:"r_garden_skink"},
+      {e:"🏓", l:"About as long as a ruler", next:"r_bluetongue"},
+      {e:"📐", l:"Bigger than 30cm — almost an arm", next:"r_water_dragon"},
+      {e:"❓", l:"Not sure", next:"r_bluetongue"}
+    ]
+  },
+  frog_colour: {
+    type:"q", emoji:"🎨",
+    text:"What colour was the frog?",
+    options:[
+      {e:"🟤", l:"Brown and bumpy", next:"r_common_froglet"},
+      {e:"🟢", l:"Bright green", next:"r_dwarf_tree_frog"},
+      {e:"🟡", l:"Brown with stripes or yellow spots", next:"r_marsh_frog"},
+      {e:"❓", l:"Not sure", next:"r_common_froglet"}
+    ]
+  },
+
+  // ── BUGS & SPIDERS ──
+  bug_type: {
+    type:"q", emoji:"🔍",
+    text:"What type of creature was it?",
+    options:[
+      {e:"🕷️", l:"Spider — 8 legs", next:"spider_size"},
+      {e:"🐝", l:"Bee or wasp — flying insect", next:"bee_type"},
+      {e:"🦋", l:"Butterfly or moth", next:"butterfly_type"},
+      {e:"🐛", l:"Caterpillar, slater or worm", next:"crawly_type"},
+      {e:"❓", l:"Not sure", next:"spider_size"}
+    ]
+  },
+  spider_size: {
+    type:"q", emoji:"📏",
+    text:"How big was the spider?",
+    options:[
+      {e:"🤏", l:"Tiny — smaller than my fingernail", next:"r_daddy_long_legs"},
+      {e:"🏓", l:"Medium — about the size of a 20c coin", next:"r_redback"},
+      {e:"✋", l:"Big — as wide as my palm or more", next:"r_huntsman"},
+      {e:"❓", l:"Not sure", next:"r_huntsman"}
+    ]
+  },
+  bee_type: {
+    type:"q", emoji:"🎨",
+    text:"What did it look like?",
+    options:[
+      {e:"🟡", l:"Fuzzy and yellow-black — made honey", next:"r_honeybee"},
+      {e:"🟡", l:"Bright yellow-black, aggressive", next:"r_wasp"},
+      {e:"❓", l:"Not sure", next:"r_honeybee"}
+    ]
+  },
+  butterfly_type: {
+    type:"q", emoji:"🎨",
+    text:"What colour were its wings?",
+    options:[
+      {e:"🟠", l:"Orange and black", next:"r_monarch"},
+      {e:"⬜", l:"White or pale yellow", next:"r_cabbage_white"},
+      {e:"❓", l:"Not sure", next:"r_monarch"}
+    ]
+  },
+  crawly_type: {
+    type:"q", emoji:"🔍",
+    text:"What did it look like?",
+    options:[
+      {e:"🩶", l:"Grey pill bug — rolled into a ball", next:"r_slater"},
+      {e:"🟤", l:"Long pink worm in the soil", next:"r_earthworm"},
+      {e:"🐌", l:"Had a shell — moved slowly", next:"r_snail"},
+      {e:"❓", l:"Not sure", next:"r_earthworm"}
+    ]
+  },
+
+  // fallback
+  not_sure_start: {
+    type:"q", emoji:"🤔",
+    text:"Can you remember anything about it?",
+    options:[
+      {e:"🐦", l:"It could fly", next:"bird_size"},
+      {e:"🐾", l:"It had fur", next:"mammal_size"},
+      {e:"🐍", l:"It had scales", next:"no_legs"},
+      {e:"🕷️", l:"It had lots of legs", next:"bug_type"},
+      {e:"❓", l:"No idea at all!", next:"r_brushtail"}
+    ]
+  },
+
+  // ── RESULTS ──
+  r_tiger_snake:     {type:"r", name:"Tiger Snake",          sci:"Notechis scutatus",          emoji:"🐍", conf:72, where:"Merri Creek and damp gardens",        runners:[{name:"Eastern Brown Snake",sci:"Pseudonaja textilis",emoji:"🐍",conf:45},{name:"Red-bellied Black",sci:"Pseudechis porphyriacus",emoji:"🐍",conf:30}]},
+  r_eastern_brown:   {type:"r", name:"Eastern Brown Snake",  sci:"Pseudonaja textilis",         emoji:"🐍", conf:75, where:"Dry gardens and open areas",           runners:[{name:"Tiger Snake",sci:"Notechis scutatus",emoji:"🐍",conf:40},{name:"Garden Skink",sci:"Lampropholis guichenoti",emoji:"🦎",conf:15}]},
+  r_redbelly:        {type:"r", name:"Red-bellied Black Snake", sci:"Pseudechis porphyriacus",  emoji:"🐍", conf:80, where:"Merri Creek and Darebin Creek banks",  runners:[{name:"Tiger Snake",sci:"Notechis scutatus",emoji:"🐍",conf:35},{name:"Eastern Brown Snake",sci:"Pseudonaja textilis",emoji:"🐍",conf:20}]},
+  r_carpet_python:   {type:"r", name:"Carpet Python",         sci:"Morelia spilota",            emoji:"🐍", conf:78, where:"Gardens, roof spaces, near creeks",    runners:[{name:"Tiger Snake",sci:"Notechis scutatus",emoji:"🐍",conf:30}]},
+  r_magpie:          {type:"r", name:"Australian Magpie",     sci:"Gymnorhina tibicen",         emoji:"🐦", conf:90, where:"Parks, ovals and backyards",           runners:[{name:"Pied Currawong",sci:"Strepera graculina",emoji:"🐦",conf:20}]},
+  r_lorikeet:        {type:"r", name:"Rainbow Lorikeet",      sci:"Trichoglossus moluccanus",   emoji:"🦜", conf:88, where:"Flowering trees and garden feeders",   runners:[{name:"Eastern Rosella",sci:"Platycercus eximius",emoji:"🦜",conf:30}]},
+  r_raven:           {type:"r", name:"Little Raven",           sci:"Corvus mellori",             emoji:"🐦", conf:82, where:"Everywhere — a true Melbourne local",  runners:[{name:"Common Blackbird",sci:"Turdus merula",emoji:"🐦",conf:25}]},
+  r_common_blackbird:{type:"r", name:"Common Blackbird",       sci:"Turdus merula",              emoji:"🐦", conf:80, where:"Dense shrubs and garden beds",         runners:[{name:"Little Raven",sci:"Corvus mellori",emoji:"🐦",conf:20}]},
+  r_cockatoo:        {type:"r", name:"Sulphur-crested Cockatoo", sci:"Cacatua galerita",        emoji:"🦜", conf:85, where:"Parks, street trees, any open area",  runners:[{name:"Little Corella",sci:"Cacatua sanguinea",emoji:"🦜",conf:30}]},
+  r_galah:           {type:"r", name:"Galah",                  sci:"Eolophus roseicapilla",      emoji:"🦜", conf:88, where:"Open parks and sporting ovals",        runners:[{name:"Sulphur-crested Cockatoo",sci:"Cacatua galerita",emoji:"🦜",conf:20}]},
+  r_tawny_frogmouth: {type:"r", name:"Tawny Frogmouth",        sci:"Podargus strigoides",        emoji:"🦉", conf:82, where:"Parks and gardens with big trees",     runners:[{name:"Boobook Owl",sci:"Ninox boobook",emoji:"🦉",conf:25}]},
+  r_boobook:         {type:"r", name:"Southern Boobook",        sci:"Ninox boobook",              emoji:"🦉", conf:78, where:"Leafy parks and creek corridors",      runners:[{name:"Tawny Frogmouth",sci:"Podargus strigoides",emoji:"🦉",conf:30}]},
+  r_noisy_miner:     {type:"r", name:"Noisy Miner",             sci:"Manorina melanocephala",     emoji:"🐦", conf:82, where:"Parks, streets and most gardens",      runners:[{name:"Indian Myna",sci:"Acridotheres tristis",emoji:"🐦",conf:35}]},
+  r_eastern_rosella: {type:"r", name:"Eastern Rosella",         sci:"Platycercus eximius",        emoji:"🦜", conf:80, where:"Parks and leafy suburban streets",     runners:[{name:"Rainbow Lorikeet",sci:"Trichoglossus moluccanus",emoji:"🦜",conf:30}]},
+  r_crested_pigeon:  {type:"r", name:"Crested Pigeon",          sci:"Ocyphaps lophotes",          emoji:"🐦", conf:82, where:"Parks, ovals and open ground",         runners:[{name:"Spotted Dove",sci:"Spilopelia chinensis",emoji:"🐦",conf:25}]},
+  r_spotted_dove:    {type:"r", name:"Spotted Dove",             sci:"Spilopelia chinensis",       emoji:"🐦", conf:78, where:"Gardens, parks and footpaths",         runners:[{name:"Crested Pigeon",sci:"Ocyphaps lophotes",emoji:"🐦",conf:25}]},
+  r_willie_wagtail:  {type:"r", name:"Willie Wagtail",           sci:"Rhipidura leucophrys",       emoji:"🐦", conf:85, where:"Parks, ovals and creek banks",         runners:[{name:"Grey Fantail",sci:"Rhipidura albiscapa",emoji:"🐦",conf:25}]},
+  r_welcome_swallow: {type:"r", name:"Welcome Swallow",          sci:"Hirundo neoxena",            emoji:"🐦", conf:82, where:"Creeks, parks and open sky",           runners:[{name:"Willie Wagtail",sci:"Rhipidura leucophrys",emoji:"🐦",conf:20}]},
+  r_grey_fantail:    {type:"r", name:"Grey Fantail",              sci:"Rhipidura albiscapa",        emoji:"🐦", conf:78, where:"Dense shrubs and creek vegetation",   runners:[{name:"Willie Wagtail",sci:"Rhipidura leucophrys",emoji:"🐦",conf:30}]},
+  r_brushtail:       {type:"r", name:"Common Brushtail Possum",  sci:"Trichosurus vulpecula",      emoji:"🐾", conf:85, where:"Roof cavities and garden trees",      runners:[{name:"Common Ringtail Possum",sci:"Pseudocheirus peregrinus",emoji:"🐾",conf:35}]},
+  r_ringtail:        {type:"r", name:"Common Ringtail Possum",   sci:"Pseudocheirus peregrinus",   emoji:"🐾", conf:85, where:"Dense garden shrubs and creepers",   runners:[{name:"Common Brushtail Possum",sci:"Trichosurus vulpecula",emoji:"🐾",conf:30}]},
+  r_fox:             {type:"r", name:"Red Fox",                   sci:"Vulpes vulpes",               emoji:"🦊", conf:82, where:"Creek corridors and open parkland",  runners:[{name:"Common Brushtail Possum",sci:"Trichosurus vulpecula",emoji:"🐾",conf:15}]},
+  r_rat:             {type:"r", name:"Black Rat",                 sci:"Rattus rattus",               emoji:"🐀", conf:78, where:"Roof spaces, garages and gardens",   runners:[{name:"Common Brushtail Possum",sci:"Trichosurus vulpecula",emoji:"🐾",conf:20}]},
+  r_mouse:           {type:"r", name:"House Mouse",               sci:"Mus musculus",                emoji:"🐭", conf:82, where:"Garages, sheds and garden beds",      runners:[{name:"Black Rat",sci:"Rattus rattus",emoji:"🐀",conf:25}]},
+  r_microbat:        {type:"r", name:"Microbat",                  sci:"Various species",             emoji:"🦇", conf:78, where:"Rooftops and flying at dusk",          runners:[{name:"Common Brushtail Possum",sci:"Trichosurus vulpecula",emoji:"🐾",conf:10}]},
+  r_bluetongue:      {type:"r", name:"Eastern Blue-tongue Lizard",sci:"Tiliqua scincoides",         emoji:"🦎", conf:85, where:"Sunny garden beds and rockeries",     runners:[{name:"Garden Skink",sci:"Lampropholis guichenoti",emoji:"🦎",conf:20}]},
+  r_garden_skink:    {type:"r", name:"Garden Skink",               sci:"Lampropholis guichenoti",    emoji:"🦎", conf:85, where:"Under rocks, logs and leaf litter",   runners:[{name:"Eastern Blue-tongue Lizard",sci:"Tiliqua scincoides",emoji:"🦎",conf:15}]},
+  r_water_dragon:    {type:"r", name:"Eastern Water Dragon",       sci:"Intellagama lesueurii",      emoji:"🦎", conf:82, where:"Merri Creek and Yarra River banks",  runners:[{name:"Eastern Blue-tongue Lizard",sci:"Tiliqua scincoides",emoji:"🦎",conf:20}]},
+  r_common_froglet:  {type:"r", name:"Common Froglet",             sci:"Crinia signifera",            emoji:"🐸", conf:80, where:"Garden ponds and creek edges",        runners:[{name:"Striped Marsh Frog",sci:"Limnodynastes peronii",emoji:"🐸",conf:30}]},
+  r_marsh_frog:      {type:"r", name:"Striped Marsh Frog",         sci:"Limnodynastes peronii",       emoji:"🐸", conf:80, where:"Boggy ground near Merri Creek",      runners:[{name:"Common Froglet",sci:"Crinia signifera",emoji:"🐸",conf:30}]},
+  r_dwarf_tree_frog: {type:"r", name:"Eastern Dwarf Tree Frog",    sci:"Litoria fallax",              emoji:"🐸", conf:75, where:"Garden ponds and creek reeds",        runners:[{name:"Common Froglet",sci:"Crinia signifera",emoji:"🐸",conf:25}]},
+  r_huntsman:        {type:"r", name:"Huntsman Spider",             sci:"Sparassidae family",          emoji:"🕷️", conf:85, where:"Walls, fences and behind bark",      runners:[{name:"Garden Orb Weaver",sci:"Eriophora transmarina",emoji:"🕷️",conf:20}]},
+  r_redback:         {type:"r", name:"Redback Spider",              sci:"Latrodectus hasselti",        emoji:"🕷️", conf:85, where:"Dry sheltered spots — sheds, pots",  runners:[{name:"Garden Orb Weaver",sci:"Eriophora transmarina",emoji:"🕷️",conf:20}]},
+  r_daddy_long_legs: {type:"r", name:"Daddy Long-legs Spider",      sci:"Pholcus phalangioides",       emoji:"🕷️", conf:85, where:"Ceilings, corners and dark spots",   runners:[{name:"Redback Spider",sci:"Latrodectus hasselti",emoji:"🕷️",conf:15}]},
+  r_honeybee:        {type:"r", name:"European Honey Bee",          sci:"Apis mellifera",              emoji:"🐝", conf:82, where:"Flowers, garden beds and hives",      runners:[{name:"European Wasp",sci:"Vespula germanica",emoji:"🐝",conf:25}]},
+  r_wasp:            {type:"r", name:"European Wasp",               sci:"Vespula germanica",           emoji:"🐝", conf:82, where:"Underground nests and rubbish bins", runners:[{name:"European Honey Bee",sci:"Apis mellifera",emoji:"🐝",conf:25}]},
+  r_monarch:         {type:"r", name:"Monarch Butterfly",           sci:"Danaus plexippus",            emoji:"🦋", conf:80, where:"Swan plant and garden flowers",       runners:[{name:"Cabbage White",sci:"Pieris rapae",emoji:"🦋",conf:20}]},
+  r_cabbage_white:   {type:"r", name:"Cabbage White Butterfly",     sci:"Pieris rapae",                emoji:"🦋", conf:82, where:"Veggie gardens and parks",            runners:[{name:"Monarch Butterfly",sci:"Danaus plexippus",emoji:"🦋",conf:20}]},
+  r_slater:          {type:"r", name:"Slater Bug",                   sci:"Porcellio scaber",            emoji:"🐛", conf:85, where:"Under rocks, logs and in compost",   runners:[{name:"Garden Earthworm",sci:"Lumbricus terrestris",emoji:"🪱",conf:15}]},
+  r_earthworm:       {type:"r", name:"Garden Earthworm",            sci:"Lumbricus terrestris",        emoji:"🪱", conf:82, where:"Soil, compost and damp garden beds", runners:[{name:"Slater Bug",sci:"Porcellio scaber",emoji:"🐛",conf:15}]},
+  r_snail:           {type:"r", name:"Garden Snail",                 sci:"Cornu aspersum",              emoji:"🐌", conf:88, where:"Veggie patches and damp garden beds",runners:[{name:"Leopard Slug",sci:"Limax maximus",emoji:"🐌",conf:20}]}
+};
 
 // ── State ──────────────────────────────────────────────────────────────────
 let state = {
   screen: "start",
-  tree: null,
   node: null,
   history: [],
   answers: [],
@@ -136,7 +423,7 @@ let state = {
 async function fetchPhoto(sciName, commonName) {
   for (const term of [sciName, commonName].filter(Boolean)) {
     try {
-      const r = await fetch(`https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(term)}&per_page=1&locale=en`);
+      const r = await fetch("https://api.inaturalist.org/v1/taxa?q=" + encodeURIComponent(term) + "&per_page=1&locale=en");
       if (!r.ok) continue;
       const d = await r.json();
       const photo = d && d.results && d.results[0] && d.results[0].default_photo;
@@ -149,89 +436,57 @@ async function fetchPhoto(sciName, commonName) {
   return null;
 }
 
-// ── API call ───────────────────────────────────────────────────────────────
-async function callClaude(messages, system, maxTokens) {
-  const body = { model: "claude-sonnet-4-5", max_tokens: maxTokens || 1000, messages };
-  if (system) body.system = system;
+// ── Final identification call ──────────────────────────────────────────────
+async function identifyFromAnswers(answers, treeResult) {
+  const summary = answers.map(function(a) { return "- " + a.q + ": " + a.a; }).join("\n");
+  const hint = treeResult ? " The question tree suggests it might be a " + treeResult.name + "." : "";
+  const prompt = "You are an expert Melbourne wildlife biologist. A child in Thornbury, Melbourne answered these questions about an animal they spotted:\n" + summary + hint + "\n\nIdentify the most likely animal from Melbourne's inner north.\nRespond ONLY with valid JSON, no markdown:\n{\"top\":{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0,\"where\":\"\",\"fact\":\"\"},\"runners\":[{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0}]}\nThe fact must be 2 genuinely surprising sentences written for a curious 10-year-old. Include 2-3 runners.";
   const res = await fetch("/api/identify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 600, messages: [{ role: "user", content: prompt }] })
   });
   const data = await res.json();
   if (data.error) throw new Error("API: " + data.error.message);
-  if (!data.content) throw new Error("Unexpected: " + JSON.stringify(data).slice(0, 200));
-  return data.content.map(function(b) { return b.text || ""; }).join("");
-}
-
-// ── Generate full tree upfront ─────────────────────────────────────────────
-async function generateTree() {
-  const text = await callClaude(
-    [{ role: "user", content: "Generate the animal identification question map for Melbourne inner north." }],
-    SYSTEM,
-    5000
-  );
+  const text = data.content.map(function(b) { return b.text || ""; }).join("");
   const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("No JSON in tree response");
-  const parsed = JSON.parse(m[0]);
-  if (!parsed.nodes || !parsed.start) throw new Error("Invalid map — missing nodes/start");
-  // Return a wrapper so the rest of the code works the same way
-  return { _flat: true, nodes: parsed.nodes, start: parsed.start };
-}
-
-// ── Final identification tailored to actual answers ────────────────────────
-async function identifyFromAnswers(answers) {
-  const summary = answers.map(function(a) { return "- " + a.q + ": " + a.a; }).join("\n");
-  const prompt = "You are an expert Melbourne wildlife biologist. A child in Thornbury answered these questions:\n" + summary + "\n\nIdentify the most likely animal from Melbourne's inner north.\nRespond ONLY with valid JSON, no markdown:\n{\"top\":{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0,\"where\":\"\",\"fact\":\"\"},\"runners\":[{\"commonName\":\"\",\"scientificName\":\"\",\"emoji\":\"\",\"confidence\":0}]}\nThe fact must be 2 sentences, genuinely surprising, written for a curious 10-year-old. Include 2-3 runners.";
-  const text = await callClaude([{ role: "user", content: prompt }], null, 800);
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("No JSON in identification");
+  if (!m) throw new Error("No JSON in response");
   return JSON.parse(m[0]);
 }
 
 // ── Start quiz ─────────────────────────────────────────────────────────────
-async function startQuiz() {
-  state = { screen: "loading", tree: null, node: null, history: [], answers: [], result: null, error: null };
+function startQuiz() {
+  state = { screen: "quiz", node: NODES.start, history: [], answers: [], result: null, error: null };
   render();
-  try {
-    const map = await generateTree();
-    state.tree = map;
-    state.node = map.nodes[map.start];
-    state.screen = "quiz";
-    render();
-  } catch(e) {
-    state.screen = "error"; state.error = String(e); render();
-  }
 }
 
 // ── Answer — instant client-side navigation ────────────────────────────────
 async function answer(optionValue, optionLabel) {
   const node = state.node;
-  const chosen = node.options.find(function(o) { return (o.value||o.l) === optionValue; });
+  const chosen = node.options.find(function(o) { return (o.l || o.value || "") === optionValue; });
   if (!chosen) return;
 
   const newAnswers = state.answers.concat([{ q: node.text, a: optionLabel }]);
-  const nextId = chosen.next;
-  const nextNode = state.tree.nodes[nextId];
+  const nextNode = NODES[chosen.next];
 
-  // Reached a result node (type "r") or missing node
   if (!nextNode || nextNode.type === "r") {
+    // Reached a result — call API for tailored ID
     state.screen = "loading";
     state.answers = newAnswers;
     render();
     try {
       let finalResult;
       try {
-        finalResult = await identifyFromAnswers(newAnswers);
+        finalResult = await identifyFromAnswers(newAnswers, nextNode);
       } catch(e2) {
-        // Fall back to flat result node
-        if (nextNode && nextNode.type === "r") {
+        // Fall back to hardcoded result
+        if (nextNode) {
           finalResult = {
-            top: { commonName: nextNode.name, scientificName: nextNode.sci, emoji: nextNode.emoji, confidence: nextNode.conf, where: nextNode.where, fact: nextNode.fact },
+            top: { commonName: nextNode.name, scientificName: nextNode.sci, emoji: nextNode.emoji, confidence: nextNode.conf, where: nextNode.where, fact: "This is one of Melbourne's most fascinating local animals!" },
             runners: nextNode.runners || []
           };
         } else {
-          finalResult = { top: { commonName: "Unknown Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Your backyard", fact: "Every animal is fascinating! Keep exploring." }, runners: [] };
+          finalResult = { top: { commonName: "Mystery Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Melbourne's inner north", fact: "Melbourne's inner north is home to over 200 animal species!" }, runners: [] };
         }
       }
       state.result = finalResult;
@@ -243,28 +498,24 @@ async function answer(optionValue, optionLabel) {
     return;
   }
 
-  // Navigate to next question — instant, no API call
+  // Navigate to next question — instant
   state.history = state.history.concat([node]);
   state.answers = newAnswers;
   state.node = nextNode;
-  state.screen = "quiz";
   render();
 }
 
-// ── Go back — instant ──────────────────────────────────────────────────────
+// ── Go back ────────────────────────────────────────────────────────────────
 function goBack() {
   if (!state.history.length) return;
-  const prev = state.history.slice(0, -1);
-  const prevNode = state.history[state.history.length - 1];
-  state.history = prev;
-  state.node = prevNode;
+  state.node = state.history[state.history.length - 1];
+  state.history = state.history.slice(0, -1);
   state.answers = state.answers.slice(0, -1);
-  state.screen = "quiz";
   render();
 }
 
 function goHome() {
-  state = { screen: "start", tree: null, node: null, history: [], answers: [], result: null, error: null };
+  state = { screen: "start", node: null, history: [], answers: [], result: null, error: null };
   render();
 }
 
@@ -305,7 +556,6 @@ function launchConfetti(emoji) {
   }
   draw();
 }
-
 
 // ── Photos ─────────────────────────────────────────────────────────────────
 async function loadPhotos() {
@@ -357,18 +607,18 @@ function render() {
 }
 
 function renderStart() {
-  return '<div class="card start-card fade-in"><span class="parade">🦝🦎🐦‍⬛🦜🕷️🐍🐸</span><h2>Spot a mystery animal?</h2><p>Our AI wildlife expert will ask you a few quick questions to figure out what you spotted in <strong>Melbourne\'s inner north!</strong><br><br>Backyards, parks, Merri Creek, the Yarra — bring it on! 🌿</p><button class="btn-primary" onclick="startQuiz()">🔍 Start Detecting!</button></div>';
+  return '<div class="card start-card fade-in"><span class="parade">🦝🦎🐦‍⬛🦜🕷️🐍🐸</span><h2>Spot a mystery animal?</h2><p>Answer a few quick questions and our AI wildlife expert will figure out what you spotted in <strong>Melbourne\'s inner north!</strong><br><br>Backyards, parks, Merri Creek, the Yarra — bring it on! 🌿</p><button class="btn-primary" onclick="startQuiz()">🔍 Start Detecting!</button></div>';
 }
 
 function renderQuiz() {
   const node = state.node; if (!node) return renderLoading();
   const qNum = state.history.length + 1;
-  const pct = Math.min(90, (qNum / 6) * 100);
+  const pct = Math.min(90, (qNum / 5) * 100);
   function esc(s) { return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
   const opts = node.options.map(function(o) {
-    const val = o.value || o.l || "";
-    const lbl = o.label || o.l || "";
-    const ico = o.emoji || o.e || "🔍";
+    const val = o.l || o.value || "";
+    const lbl = o.l || o.label || "";
+    const ico = o.e || o.emoji || "🔍";
     return '<button class="opt" onclick="answer(\'' + esc(val) + '\',\'' + esc(lbl) + '\')"><span class="opt-emoji">' + ico + '</span><span>' + lbl + '</span></button>';
   }).join("");
   const back = state.history.length > 0 ? '<button class="back-btn" onclick="goBack()">← Back</button>' : "";
@@ -376,12 +626,7 @@ function renderQuiz() {
 }
 
 function renderLoading() {
-  const isFirst = !state.tree;
-  const msgs = isFirst
-    ? ["Building your question tree…","Consulting Melbourne wildlife records…","Preparing your detective kit…"]
-    : ["Identifying your mystery creature…","Checking field guides…","Almost there…"];
-  const msg = msgs[Math.floor(Math.random() * msgs.length)];
-  return '<div class="card loading-card fade-in"><div class="spinner"></div><div class="loading-title">' + (isFirst ? "🌿 Getting ready…" : "🔍 On the case…") + '</div><div class="loading-sub">' + msg + '</div></div>';
+  return '<div class="card loading-card fade-in"><div class="spinner"></div><div class="loading-title">🔍 On the case…</div><div class="loading-sub">Checking the Melbourne field guide…</div></div>';
 }
 
 function renderResult() {
