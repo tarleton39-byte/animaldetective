@@ -101,29 +101,25 @@ h1 span{color:#2d7a4f;}
 </div>
 <script>
 // ── System prompt — generates full question tree upfront ───────────────────
-const SYSTEM = `You are a wildlife expert for Melbourne's inner north (Thornbury, Northcote, Preston, Brunswick, Coburg, Fitzroy, Collingwood, Merri Creek, Darebin Creek, Yarra River corridor).
+const SYSTEM = `You are a wildlife expert for Melbourne's inner north. Generate a flat question map to identify animals spotted by children in Thornbury, Northcote, Preston, Brunswick, Coburg, Fitzroy, Merri Creek, Darebin Creek areas.
 
-Generate a complete branching question tree to identify an unknown animal spotted by a child in this area.
+Output a JSON object with two keys:
+- "start": the ID of the first question (string)
+- "nodes": an object where each key is a node ID and value is a QUESTION or RESULT node
 
-The tree must:
-- Start with a broad question (e.g. legs)
-- Each answer leads to either another question node OR a result node
-- Maximum depth of 6 questions along any path
-- Cover all common Melbourne inner-north animals: possums, magpies, lorikeets, rosellas, ravens, mynas, blackbirds, blue-tongue lizards, garden skinks, water dragons, tiger snakes, eastern brown snakes, red-bellied black snakes, carpet pythons, common froglets, striped marsh frogs, huntsman spiders, redback spiders, garden orb weavers, daddy-long-legs, European wasps, honey bees, monarch butterflies, foxes, rats, mice, microbats, tawny frogmouths, powerful owls, boobook owls, willie wagtails, welcome swallows, grey fantails, spotted doves, crested pigeons, sulphur-crested cockatoos, galahs, little corellas
-- Use simple language a 10-year-old understands
-- Each question node has 3-5 options with fun emojis
-- Every option must have a "next" that is either a question node or result node — NO dead ends
-- Always include a "not_sure" option on every question
+QUESTION node format: {"type":"q","emoji":"🦵","text":"Question?","options":[{"e":"🐍","l":"No legs","next":"some_id"}]}
+RESULT node format: {"type":"r","name":"Brushtail Possum","sci":"Trichosurus vulpecula","emoji":"🐾","conf":88,"where":"Roof cavities and trees","fact":"Possums can live 10+ years!","runners":[{"name":"Ringtail Possum","sci":"Pseudocheirus peregrinus","emoji":"🐾","conf":30}]}
 
-Question node format:
-{"type":"question","id":"unique_id","emoji":"🦵","text":"Question text?","options":[{"emoji":"🐍","label":"Option label","value":"val","next": ...}]}
+Rules:
+- Max 5 options per question, each with e (emoji), l (label under 40 chars), next (node ID)
+- Always include a not-sure option on every question pointing to a sensible default result
+- Cover: possums, magpies, lorikeets, rosellas, ravens, mynas, blackbirds, blue-tongues, skinks, water dragons, tiger snakes, eastern browns, red-bellied blacks, carpet pythons, froglets, marsh frogs, huntsmen, redbacks, orb weavers, wasps, bees, butterflies, foxes, rats, mice, microbats, tawny frogmouths, owls, willie wagtails, swallows, fantails, doves, cockatoos, galahs, corellas
+- Use child-friendly language (say "tennis ball sized" not "sparrow sized")
+- Max 5 questions deep per path
+- Keep fact strings under 120 chars, labels under 40 chars
+- Aim for 30-45 total nodes to keep size manageable
 
-Result node format:
-{"type":"result","top":{"commonName":"Tiger Snake","scientificName":"Notechis scutatus","emoji":"🐍","confidence":75,"where":"Creekside and damp gardens","fact":"Two fun sentences for a 10-year-old."},"runners":[{"commonName":"Eastern Brown Snake","scientificName":"Pseudonaja textilis","emoji":"🐍","confidence":45}]}
-
-Respond ONLY with a JSON object: {"tree": <root question node>}
-No markdown fences, no explanation, just the JSON.
-IMPORTANT: Keep the tree compact. Use short labels and short fact strings. The entire JSON response must be under 7000 tokens.`;
+Respond ONLY with the JSON. No markdown fences, no explanation.`;
 
 // ── State ──────────────────────────────────────────────────────────────────
 let state = {
@@ -171,15 +167,16 @@ async function callClaude(messages, system, maxTokens) {
 // ── Generate full tree upfront ─────────────────────────────────────────────
 async function generateTree() {
   const text = await callClaude(
-    [{ role: "user", content: "Generate the complete animal identification question tree for Melbourne's inner north." }],
+    [{ role: "user", content: "Generate the animal identification question map for Melbourne inner north." }],
     SYSTEM,
-    8000
+    5000
   );
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("No JSON in tree response");
   const parsed = JSON.parse(m[0]);
-  if (!parsed.tree) throw new Error("Invalid tree — missing 'tree' key");
-  return parsed.tree;
+  if (!parsed.nodes || !parsed.start) throw new Error("Invalid map — missing nodes/start");
+  // Return a wrapper so the rest of the code works the same way
+  return { _flat: true, nodes: parsed.nodes, start: parsed.start };
 }
 
 // ── Final identification tailored to actual answers ────────────────────────
@@ -197,9 +194,9 @@ async function startQuiz() {
   state = { screen: "loading", tree: null, node: null, history: [], answers: [], result: null, error: null };
   render();
   try {
-    const tree = await generateTree();
-    state.tree = tree;
-    state.node = tree;
+    const map = await generateTree();
+    state.tree = map;
+    state.node = map.nodes[map.start];
     state.screen = "quiz";
     render();
   } catch(e) {
@@ -210,14 +207,15 @@ async function startQuiz() {
 // ── Answer — instant client-side navigation ────────────────────────────────
 async function answer(optionValue, optionLabel) {
   const node = state.node;
-  const chosen = node.options.find(function(o) { return o.value === optionValue; });
+  const chosen = node.options.find(function(o) { return (o.value||o.l) === optionValue; });
   if (!chosen) return;
 
   const newAnswers = state.answers.concat([{ q: node.text, a: optionLabel }]);
-  const next = chosen.next;
+  const nextId = chosen.next;
+  const nextNode = state.tree.nodes[nextId];
 
-  // Reached a result node — do final tailored ID call
-  if (!next || next.type === "result") {
+  // Reached a result node (type "r") or missing node
+  if (!nextNode || nextNode.type === "r") {
     state.screen = "loading";
     state.answers = newAnswers;
     render();
@@ -226,8 +224,15 @@ async function answer(optionValue, optionLabel) {
       try {
         finalResult = await identifyFromAnswers(newAnswers);
       } catch(e2) {
-        // Fall back to tree's built-in result
-        finalResult = next || { top: { commonName: "Unknown Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Your backyard", fact: "Every animal is fascinating in its own way! Keep exploring and you'll find out more." }, runners: [] };
+        // Fall back to flat result node
+        if (nextNode && nextNode.type === "r") {
+          finalResult = {
+            top: { commonName: nextNode.name, scientificName: nextNode.sci, emoji: nextNode.emoji, confidence: nextNode.conf, where: nextNode.where, fact: nextNode.fact },
+            runners: nextNode.runners || []
+          };
+        } else {
+          finalResult = { top: { commonName: "Unknown Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Your backyard", fact: "Every animal is fascinating! Keep exploring." }, runners: [] };
+        }
       }
       state.result = finalResult;
       state.screen = "result";
@@ -241,7 +246,7 @@ async function answer(optionValue, optionLabel) {
   // Navigate to next question — instant, no API call
   state.history = state.history.concat([node]);
   state.answers = newAnswers;
-  state.node = next;
+  state.node = nextNode;
   state.screen = "quiz";
   render();
 }
@@ -359,9 +364,12 @@ function renderQuiz() {
   const node = state.node; if (!node) return renderLoading();
   const qNum = state.history.length + 1;
   const pct = Math.min(90, (qNum / 6) * 100);
-  function esc(s) { return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
+  function esc(s) { return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
   const opts = node.options.map(function(o) {
-    return '<button class="opt" onclick="answer(\'' + esc(o.value) + '\',\'' + esc(o.label) + '\')"><span class="opt-emoji">' + o.emoji + '</span><span>' + o.label + '</span></button>';
+    const val = o.value || o.l || "";
+    const lbl = o.label || o.l || "";
+    const ico = o.emoji || o.e || "🔍";
+    return '<button class="opt" onclick="answer(\'' + esc(val) + '\',\'' + esc(lbl) + '\')"><span class="opt-emoji">' + ico + '</span><span>' + lbl + '</span></button>';
   }).join("");
   const back = state.history.length > 0 ? '<button class="back-btn" onclick="goBack()">← Back</button>' : "";
   return '<div class="prog-bg"><div class="prog-bar" style="width:' + pct + '%"></div></div><div class="prog-label">Question ' + qNum + '</div><div class="card fade-in"><div class="q-tag">Question ' + qNum + '</div><span class="q-emoji">' + (node.emoji || "🔍") + '</span><div class="q-text">' + node.text + '</div><div>' + opts + '</div>' + back + '</div>';
