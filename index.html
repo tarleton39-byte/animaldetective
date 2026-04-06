@@ -37,6 +37,10 @@ h1 span{color:#2d7a4f;}
 .not-sure-btn{display:flex;align-items:center;gap:10px;padding:11px 16px;border:2px dashed #d4c9bb;border-radius:16px;background:transparent;cursor:pointer;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;color:#a89880;text-align:left;width:100%;margin-top:4px;margin-bottom:6px;transition:all 0.12s;}
 .not-sure-btn:hover{border-color:#f4913d;color:#f4913d;background:#fff5ed;}
 .back-btn{background:none;border:none;color:#a89880;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:14px;padding:4px;}
+.extra-input{width:100%;padding:14px 16px;border:2.5px solid #e8ddd0;border-radius:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:600;color:#4a2f14;background:white;resize:none;margin-bottom:12px;transition:border-color 0.12s;box-sizing:border-box;}
+.extra-input:focus{outline:none;border-color:#7ec94b;}
+.extra-label{font-family:'Fredoka One',cursive;font-size:1.1rem;color:#4a2f14;margin-bottom:8px;display:block;}
+.extra-hint{font-size:13px;color:#a89880;font-weight:600;margin-bottom:14px;}
 .btn-primary{display:inline-flex;align-items:center;gap:8px;background:#2d7a4f;color:white;border:none;border-radius:16px;padding:14px 28px;font-family:'Fredoka One',cursive;font-size:1.05rem;cursor:pointer;box-shadow:0 4px 0 #1a5c35;margin:4px;transition:all 0.12s;}
 .btn-primary:hover{background:#236040;transform:translateY(-2px);box-shadow:0 6px 0 #1a5c35;}
 .btn-primary:active{transform:translateY(2px);box-shadow:0 2px 0 #1a5c35;}
@@ -956,7 +960,7 @@ async function identifyFromAnswers(answers, treeResult) {
 
 // ── Start quiz ─────────────────────────────────────────────────────────────
 function startQuiz() {
-  state = { screen: "quiz", node: NODES.start, history: [], answers: [], result: null, error: null };
+  state = { screen: "quiz", node: NODES.start, history: [], answers: [], extra: "", result: null, error: null };
   render();
 }
 
@@ -970,29 +974,11 @@ async function answer(optionValue, optionLabel) {
   const nextNode = NODES[chosen.next];
 
   if (!nextNode || nextNode.type === "r") {
-    state.screen = "loading";
+    // Show extra info input before identifying
     state.answers = newAnswers;
+    state.pendingResult = nextNode;
+    state.screen = "extra";
     render();
-    try {
-      let finalResult;
-      try {
-        finalResult = await identifyFromAnswers(newAnswers, nextNode);
-      } catch(e2) {
-        if (nextNode) {
-          finalResult = {
-            top: { commonName: nextNode.name, scientificName: nextNode.sci, emoji: nextNode.emoji, confidence: nextNode.conf, where: nextNode.where, facts: ["This animal lives right here in Melbourne's inner north!", "It plays an important role in the local ecosystem.", "Keep your eyes peeled  - you might spot it again!"], tip: "If it's in your backyard, give it some space and it will usually move on by itself." },
-            runners: nextNode.runners || []
-          };
-        } else {
-          finalResult = { top: { commonName: "Mystery Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Melbourne's inner north", facts: ["Melbourne's inner north is home to over 200 animal species!", "Many animals only come out at night.", "Your backyard is part of a living wildlife corridor!"], tip: "Most wild animals will move on by themselves if left alone. Avoid feeding them to discourage return visits." }, runners: [] };
-        }
-      }
-      state.result = finalResult;
-      state.screen = "result";
-      render();
-    } catch(e) {
-      state.screen = "error"; state.error = String(e); render();
-    }
     return;
   }
 
@@ -1000,6 +986,39 @@ async function answer(optionValue, optionLabel) {
   state.answers = newAnswers;
   state.node = nextNode;
   render();
+}
+
+// ── Submit extra info and identify ────────────────────────────────────────
+async function submitExtra() {
+  const input = document.getElementById("extra-info-input");
+  const extra = input ? input.value.trim() : "";
+  state.extra = extra;
+  state.screen = "loading";
+  render();
+  const nextNode = state.pendingResult;
+  const answers = extra
+    ? state.answers.concat([{ q: "Anything else you noticed?", a: extra }])
+    : state.answers;
+  try {
+    let finalResult;
+    try {
+      finalResult = await identifyFromAnswers(answers, nextNode);
+    } catch(e2) {
+      if (nextNode) {
+        finalResult = {
+          top: { commonName: nextNode.name, scientificName: nextNode.sci, emoji: nextNode.emoji, confidence: nextNode.conf, where: nextNode.where, facts: ["This animal lives right here in Melbourne's inner north!", "It plays an important role in the local ecosystem.", "Keep your eyes peeled - you might spot it again!"], tip: "If it's in your backyard, give it some space and it will usually move on by itself." },
+          runners: nextNode.runners || []
+        };
+      } else {
+        finalResult = { top: { commonName: "Mystery Animal", scientificName: "", emoji: "🐾", confidence: 50, where: "Melbourne's inner north", facts: ["Melbourne's inner north is home to over 200 animal species!", "Many animals only come out at night.", "Your backyard is part of a living wildlife corridor!"], tip: "Most wild animals will move on by themselves if left alone. Avoid feeding them to discourage return visits." }, runners: [] };
+      }
+    }
+    state.result = finalResult;
+    state.screen = "result";
+    render();
+  } catch(e) {
+    state.screen = "error"; state.error = String(e); render();
+  }
 }
 
 // ── Go back ────────────────────────────────────────────────────────────────
@@ -1012,7 +1031,7 @@ function goBack() {
 }
 
 function goHome() {
-  state = { screen: "start", node: null, history: [], answers: [], result: null, error: null };
+  state = { screen: "start", node: null, history: [], answers: [], extra: "", result: null, error: null };
   render();
 }
 
@@ -1093,6 +1112,7 @@ function render() {
   const app = document.getElementById("app");
   if (state.screen === "start")        app.innerHTML = renderStart();
   else if (state.screen === "quiz")    app.innerHTML = renderQuiz();
+  else if (state.screen === "extra")   app.innerHTML = renderExtra();
   else if (state.screen === "loading") app.innerHTML = renderLoading();
   else if (state.screen === "result") {
     app.innerHTML = renderResult();
@@ -1120,6 +1140,11 @@ function renderQuiz() {
   }).join("");
   const back = state.history.length > 0 ? '<button class="back-btn" onclick="goBack()">← Back</button>' : "";
   return '<div class="prog-bg"><div class="prog-bar" style="width:' + pct + '%"></div></div><div class="prog-label">Question ' + qNum + '</div><div class="card fade-in"><div class="q-tag">Question ' + qNum + '</div><span class="q-emoji">' + (node.emoji || "🔍") + '</span><div class="q-text">' + node.text + '</div><div>' + opts + '</div>' + back + '</div>';
+}
+
+function renderExtra() {
+  const back = '<button class="back-btn" onclick="goBack()">← Back</button>';
+  return '<div class="card fade-in"><div class="q-tag">Almost there!</div><span class="q-emoji">🔎</span><div class="q-text">Anything else you noticed?</div><span class="extra-hint">Add any extra details  - colour, size, smell, sound, where exactly you saw it. Or just skip!</span><textarea class="extra-input" id="extra-info-input" rows="3" placeholder="e.g. it was making a clicking sound and had an orange stripe..."></textarea><button class="btn-primary" onclick="submitExtra()" style="width:100%;justify-content:center;">🔍 Identify it!</button>' + back + '</div>';
 }
 
 function renderLoading() {
